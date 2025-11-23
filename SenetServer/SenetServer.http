@@ -1,0 +1,11 @@
+@SenetServer_HostAddress = https://localhost:7019
+
+GET {{SenetServer_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
+
+@userName=string
+GET {{SenetServer_HostAddress}}/game/requestjoingame?userName={{userName}}
+
+###
