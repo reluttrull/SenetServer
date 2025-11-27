@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using System;
 
@@ -20,10 +21,16 @@ namespace SenetServer.Shared
             var cookieOptions = new CookieOptions
             {
                 HttpOnly = true,
-                SameSite = SameSiteMode.Lax,
+                SameSite = SameSiteMode.None, 
+                Secure = true,                 
                 Expires = DateTimeOffset.UtcNow.AddYears(1)
             };
-            httpContext.Response.Cookies.Append(CookieName, newId, cookieOptions);
+
+            // do not attempt to write headers if the response has already started
+            if (!httpContext.Response.HasStarted)
+            {
+                httpContext.Response.Cookies.Append(CookieName, newId, cookieOptions);
+            }
             return newId;
         }
     }

@@ -7,6 +7,7 @@ using Microsoft.Extensions.FileProviders.Physical;
 using SenetServer.Matchmaking;
 using SenetServer.Model;
 using SenetServer.Shared;
+using SenetServer.SignalR;
 using System;
 
 namespace SenetServer.Controllers

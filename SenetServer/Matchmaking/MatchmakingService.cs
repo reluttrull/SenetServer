@@ -1,8 +1,7 @@
 ﻿using SenetServer.Model;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using System.Threading;
-using System.Threading.Tasks;
+using Microsoft.AspNetCore.SignalR;
+using SenetServer.SignalR;
+using System.Diagnostics;
 
 namespace SenetServer.Matchmaking
 {
@@ -10,11 +9,19 @@ namespace SenetServer.Matchmaking
     {
         private readonly IMatchmakingQueue _matchmakingQueue;
         private readonly ILogger<MatchmakingService> _logger;
+        private readonly IHubContext<NotificationHub> _hubContext;
+        private readonly IUserConnectionManager _connectionManager;
 
-        public MatchmakingService(IMatchmakingQueue matchmakingQueue, ILogger<MatchmakingService> logger)
+        public MatchmakingService(
+            IMatchmakingQueue matchmakingQueue,
+            ILogger<MatchmakingService> logger,
+            IHubContext<NotificationHub> hubContext,
+            IUserConnectionManager connectionManager)
         {
             _matchmakingQueue = matchmakingQueue;
             _logger = logger;
+            _hubContext = hubContext;
+            _connectionManager = connectionManager;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -44,15 +51,83 @@ namespace SenetServer.Matchmaking
             }
         }
 
-        private Task ProcessMatchmakingPairAsync(MatchRequest a, MatchRequest b, CancellationToken stoppingToken)
+        private async Task ProcessMatchmakingPairAsync(MatchRequest a, MatchRequest b, CancellationToken stoppingToken)
         {
             _logger.LogInformation("Paired users {A}: {AName} and {B}: {BName}", a.UserId, a.UserName, b.UserId, b.UserName);
 
-            GameState gameState = new GameState(new User(a.UserId, a.UserName), new User(b.UserId, b.UserName));
-            GameStart aGameStart = new GameStart(gameState, true);
-            GameStart bGameStart = new GameStart(gameState, false);
+            var gameState = new GameState(new User(a.UserId, a.UserName), new User(b.UserId, b.UserName));
+            var matchResponse = new MatchResponse()
+            {
+                PlayerWhite = gameState.PlayerWhite,
+                PlayerBlack = gameState.PlayerBlack,
+                TimeMatched = DateTime.UtcNow
+            };
 
-            return Task.CompletedTask;
+            // wait for both users to have an active SignalR connection (with a timeout).
+            var timeout = TimeSpan.FromSeconds(10);
+            var pollInterval = TimeSpan.FromMilliseconds(200);
+            var sw = Stopwatch.StartNew();
+
+            while (!stoppingToken.IsCancellationRequested && sw.Elapsed < timeout)
+            {
+                if (_connectionManager.HasConnections(a.UserId) && _connectionManager.HasConnections(b.UserId))
+                {
+                    break;
+                }
+
+                await Task.Delay(pollInterval, stoppingToken);
+            }
+
+            if (!_connectionManager.HasConnections(a.UserId) || !_connectionManager.HasConnections(b.UserId))
+            {
+                _logger.LogWarning("One or both users are not connected for users {A} and {B}. Sending only to connected users if any.", a.UserId, b.UserId);
+
+                var connected = new List<string>();
+                if (_connectionManager.HasConnections(a.UserId)) connected.Add(a.UserId);
+                if (_connectionManager.HasConnections(b.UserId)) connected.Add(b.UserId);
+
+                if (connected.Count == 0)
+                {
+                    _logger.LogWarning("No active SignalR connections for users {A} or {B}. MatchResponse will not be sent via SignalR.", a.UserId, b.UserId);
+                    return;
+                }
+
+                try
+                {
+                    await _hubContext.Clients.Users(connected)
+                        .SendAsync("MatchFound", matchResponse, cancellationToken: stoppingToken);
+
+                    _logger.LogInformation("Sent MatchResponse to connected subset of users {Users}.", string.Join(",", connected));
+                }
+                catch (OperationCanceledException)
+                {
+                    // todo: handle cancellation request
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to send MatchResponse to subset of users {A} and {B}.", a.UserId, b.UserId);
+                }
+
+                return;
+            }
+
+            // both connected — send to both
+            try
+            {
+                var users = new[] { a.UserId, b.UserId };
+                await _hubContext.Clients.Users(users)
+                    .SendAsync("MatchFound", matchResponse, cancellationToken: stoppingToken);
+
+                _logger.LogInformation("Sent MatchResponse to users {A} and {B}.", a.UserId, b.UserId);
+            }
+            catch (OperationCanceledException)
+            {
+                // todo: handle cancellation request
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send MatchResponse to users {A} and {B}.", a.UserId, b.UserId);
+            }
         }
     }
 }
