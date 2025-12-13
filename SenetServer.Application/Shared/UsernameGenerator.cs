@@ -8,7 +8,9 @@ namespace SenetServer.Shared
         {
             string adjective = "", noun = "";
             int number = 0;
-            using (StreamReader r = new StreamReader("Shared/UsernameComponents.json"))
+            string filePath = Path.Combine(AppContext.BaseDirectory, "Shared", "UsernameComponents.json");
+            
+            using (StreamReader r = new StreamReader(filePath))
             {
                 try
                 {

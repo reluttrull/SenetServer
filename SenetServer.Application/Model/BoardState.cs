@@ -1,6 +1,4 @@
-﻿using Microsoft.AspNetCore.Http.HttpResults;
-
-namespace SenetServer.Model
+﻿namespace SenetServer.Model
 {
     public class BoardState
     {
