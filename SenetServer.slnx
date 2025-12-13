@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="SenetServer.Contracts/SenetServer.Contracts.csproj" Id="1b667c0a-52cd-4431-a5fd-e021249f769d" />
   <Project Path="SenetServer.Tests/SenetServer.Tests.csproj" Id="fd909d57-2975-484d-a750-414bbbb71835" />
   <Project Path="SenetServer/SenetServer.csproj" />
 </Solution>

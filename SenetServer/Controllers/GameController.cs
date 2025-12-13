@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.FileProviders.Physical;
+using SenetServer.Mapping;
 using SenetServer.Matchmaking;
 using SenetServer.Model;
 using SenetServer.Shared;
@@ -39,21 +40,26 @@ namespace SenetServer.Controllers
         {
             var userId = UserIdentity.GetOrCreateUserId(HttpContext);
 
-            string userName = UsernameGenerator.GetNewUsername();
+            string userName = UsernameGenerator.GetNewUsername() ?? $"Anonymous{new Random().Next(10000)}";
 
             var request = new MatchRequest
             {
                 UserId = userId,
-                UserName = userName ?? $"Anonymous{new Random().Next(10000)}",
+                UserName = userName,
                 TimeAdded = DateTime.UtcNow
             };
 
             await _matchmakingQueue.EnqueueAsync(request);
             _logger.LogInformation("Enqueued match request for user {UserId}: {UserName}", userId, userName);
 
+            UserInfo userInfo = new UserInfo()
+            {
+                UserId = userId,
+                UserName = userName
+            };
             // return 202 with userId for SignalR notifications and userName for display
             // meanwhile, background service still has to process matches in queue
-            return Accepted(new { UserId = userId, UserName = userName });
+            return Accepted(ContractMapping.MapToResponse(userInfo));
         }
 
         [HttpPut]
