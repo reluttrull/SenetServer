@@ -16,6 +16,7 @@ namespace SenetServer.Matchmaking
         private readonly IUserConnectionManager _connectionManager;
         private readonly IMemoryCache _memoryCache;
 
+        private readonly TimeSpan _queueTimeout = TimeSpan.FromSeconds(30);
 
         public MatchmakingService(
             IMatchmakingQueue matchmakingQueue,
@@ -35,10 +36,19 @@ namespace SenetServer.Matchmaking
         {
             _logger.LogInformation("Matchmaking Service running.");
 
+            // Start cleanup task that runs periodically
+            var cleanupTask = CleanupExpiredQueueItemsAsync(stoppingToken);
+
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
                 {
+                    // Wait until at least 2 items are in the queue before dequeueing
+                    while (!QueueHasAtLeast(2))
+                    {
+                        await Task.Delay(100, stoppingToken);
+                    }
+
                     var first = await _matchmakingQueue.DequeueAsync(stoppingToken);
                     _logger.LogInformation("Dequeued first match request for user {UserId}: {UserName} (queued at {TimeAdded})", first.UserId, first.UserName, first.TimeAdded);
 
@@ -54,6 +64,64 @@ namespace SenetServer.Matchmaking
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error occurred executing matchmaking request.");
+                }
+            }
+
+            await cleanupTask;
+        }
+
+        private bool QueueHasAtLeast(int count)
+        {
+            return _matchmakingQueue.Count >= count;
+        }
+
+        private async Task CleanupExpiredQueueItemsAsync(CancellationToken stoppingToken)
+        {
+            var cleanupInterval = TimeSpan.FromSeconds(5); // check every 5 seconds
+
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(cleanupInterval, stoppingToken);
+
+                    var now = DateTime.UtcNow;
+                    int removedCount = 0;
+
+                    while (_matchmakingQueue.TryPeek(out var item))
+                    {
+                        if (now - item.TimeAdded > _queueTimeout)
+                        {
+                            MatchRequest requestToRemove = await _matchmakingQueue.DequeueAsync(stoppingToken);
+                            if (requestToRemove is null || item.UserId != requestToRemove.UserId)
+                            {
+                                _logger.LogInformation("Problem removing expired match request for user {UserId}: {UserName} (queued at {TimeAdded})", item.UserId, item.UserName, item.TimeAdded);
+                                break; // if we ran into one race condition, we'll likely run into more - abort task
+                            }
+                            await _hubContext.Clients.User(requestToRemove.UserId)
+                                .SendAsync("MatchNotFound", cancellationToken: stoppingToken);
+                            removedCount++;
+                            _logger.LogInformation("Removed expired match request for user {UserId}: {UserName} (queued at {TimeAdded})", item.UserId, item.UserName, item.TimeAdded);
+                        }
+                        else
+                        {
+                            // everything after this point is within timeout range
+                            break;
+                        }
+                    }
+
+                    if (removedCount > 0)
+                    {
+                        _logger.LogInformation("Cleaned up {Count} expired match requests from queue.", removedCount);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error occurred during queue cleanup.");
                 }
             }
         }

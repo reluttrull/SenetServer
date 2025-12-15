@@ -22,5 +22,10 @@ namespace SenetServer.Matchmaking
 
         public async ValueTask<MatchRequest> DequeueAsync(CancellationToken cancellationToken) =>
             await _queue.Reader.ReadAsync(cancellationToken);
+
+        public bool TryPeek(out MatchRequest request) =>
+            _queue.Reader.TryPeek(out request);
+
+        public int Count => _queue.Reader.Count;
     }
 }

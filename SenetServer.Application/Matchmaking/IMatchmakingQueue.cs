@@ -6,5 +6,7 @@ namespace SenetServer.Matchmaking
     {
         ValueTask EnqueueAsync(MatchRequest request);
         ValueTask<MatchRequest> DequeueAsync(CancellationToken cancellationToken);
+        bool TryPeek(out MatchRequest request);
+        int Count { get; }
     }
 }
