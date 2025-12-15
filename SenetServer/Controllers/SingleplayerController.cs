@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Caching.Memory;
+using SenetServer.Application.ComputerOpponent;
 using SenetServer.Matchmaking;
 using SenetServer.Model;
 using SenetServer.SignalR;
@@ -13,18 +14,18 @@ namespace SenetServer.Controllers
     {
         private readonly ILogger<MultiplayerController> _logger;
         private readonly IHubContext<NotificationHub> _hubContext;
-        private readonly IMatchmakingQueue _matchmakingQueue;
+        private readonly IComputerOpponentQueue _computerOpponentQueue;
         private readonly IMemoryCache _memoryCache;
 
         public SingleplayerController(
             ILogger<MultiplayerController> logger,
             IHubContext<NotificationHub> hubContext,
-            IMatchmakingQueue matchmakingQueue,
+            IComputerOpponentQueue computerOpponentQueue,
             IMemoryCache memoryCache)
         {
             _logger = logger;
             _hubContext = hubContext;
-            _matchmakingQueue = matchmakingQueue;
+            _computerOpponentQueue = computerOpponentQueue;
             _memoryCache = memoryCache;
         }
 
@@ -49,7 +50,7 @@ namespace SenetServer.Controllers
             var cacheEntryOptions = new MemoryCacheEntryOptions()
                 .SetSlidingExpiration(TimeSpan.FromHours(3));
             _memoryCache.Set(userId, gameState, cacheEntryOptions);
-            _logger.LogInformation("Sent MatchResponse to singleplayer user {userId}.", string.Join(",", userId));
+            _logger.LogInformation("Sent MatchResponse to singleplayer user {userId}.", userId);
 
             return Ok();
         }
@@ -96,6 +97,11 @@ namespace SenetServer.Controllers
             }
 
             // if computer's turn, start moving
+            if (gameState.BoardState.IsWhiteTurn == (gameState.PlayerWhite.UserName == Constants.ComputerOpponentName))
+            {
+                await _computerOpponentQueue.EnqueueAsync(gameState);
+                _logger.LogInformation("Turned over game to computer opponent for user {userId}.", userId);
+            }
 
             return Ok();
         }
@@ -116,6 +122,11 @@ namespace SenetServer.Controllers
                 .SendAsync("BoardUpdated", gameState.BoardState);
 
             // if computer's turn, start moving
+            if (gameState.BoardState.IsWhiteTurn == (gameState.PlayerWhite.UserName == Constants.ComputerOpponentName))
+            {
+                await _computerOpponentQueue.EnqueueAsync(gameState);
+                _logger.LogInformation("Turned over game to computer opponent for user {userId}.", userId);
+            }
 
             return Ok();
         }

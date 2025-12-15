@@ -37,7 +37,7 @@ namespace SenetServer.Application.ComputerOpponent
                 {
                     var gameState = await _computerOpponentQueue.DequeueAsync(stoppingToken);
                     // todo: human player won't always be white
-                    _logger.LogInformation("Computer opponent equeued next game against user {UserId}: {UserName}", gameState.PlayerWhite.UserId, gameState.PlayerWhite.UserName);
+                    _logger.LogInformation("Computer opponent queued next game against user {UserId}: {UserName}", gameState.PlayerWhite.UserId, gameState.PlayerWhite.UserName);
 
                     await PlayTurnAsync(gameState, stoppingToken);
                 }
@@ -54,7 +54,7 @@ namespace SenetServer.Application.ComputerOpponent
 
         private async Task PlayTurnAsync(GameState gameState, CancellationToken stoppingToken)
         {
-            Console.WriteLine("playing turn in game");
+            _logger.LogInformation("playing turn in game");
             await Task.Delay(1000);
         }
     }
