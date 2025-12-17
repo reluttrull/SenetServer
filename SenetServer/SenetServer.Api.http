@@ -1,0 +1,13 @@
+﻿@SenetServer.Api_HostAddress = https://localhost:7019
+
+GET {{SenetServer.Api_HostAddress}}/multiplayer/games
+Content-Type: application/json
+
+{
+  "userId": "5ccfb746-a241-4705-b388-0abcef71240f",
+  "userName": "CrsdfsdfeativeCamel677"
+}
+
+###
+
+

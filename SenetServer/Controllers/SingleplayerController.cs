@@ -2,8 +2,11 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Caching.Memory;
 using SenetServer.Application.ComputerOpponent;
+using SenetServer.Contracts.Requests;
+using SenetServer.Mapping;
 using SenetServer.Matchmaking;
 using SenetServer.Model;
+using SenetServer.Shared;
 using SenetServer.SignalR;
 
 namespace SenetServer.Controllers
@@ -29,28 +32,34 @@ namespace SenetServer.Controllers
             _memoryCache = memoryCache;
         }
 
-        [HttpGet]
-        [Route("games/{userName}/{userId}")]
-        public async Task<IActionResult> RequestJoinGame(string userName, string userId)
+        [HttpPost]
+        [Route("games")]
+        public async Task<IActionResult> RequestJoinGame([FromBody] StartGameRequest request)
         {
-            _logger.LogInformation("Starting singleplayer game for user {UserId}: {UserName}", userId, userName);
+            User user = request.MapToUser();
+            if (user.UserId == string.Empty || user.UserName == string.Empty) // todo: add proper validation
+            {
+                user.UserId = UserIdentity.GetOrCreateUserId(HttpContext);
+                user.UserName = UsernameGenerator.GetNewUsername() ?? $"Anonymous{new Random().Next(10000)}";
+            }
 
-            var gameState = new GameState(new User(userId, userName), new User(string.Empty, Constants.ComputerOpponentName));
+            _logger.LogInformation("Starting singleplayer game for user {UserId}: {UserName}", user.UserId, user.UserName);
+            var gameState = new GameState(user, new User(string.Empty, Constants.ComputerOpponentName));
             var matchResponse = new MatchResponse()
             {
                 PlayerWhite = gameState.PlayerWhite,
                 PlayerBlack = gameState.PlayerBlack,
                 TimeMatched = DateTime.UtcNow
             };
-            await _hubContext.Clients.User(userId)
+            await _hubContext.Clients.User(user.UserId)
                 .SendAsync("MatchFound", matchResponse);
-            await _hubContext.Clients.User(userId)
+            await _hubContext.Clients.User(user.UserId)
                 .SendAsync("BoardUpdated", gameState.BoardState);
 
             var cacheEntryOptions = new MemoryCacheEntryOptions()
                 .SetSlidingExpiration(TimeSpan.FromHours(3));
-            _memoryCache.Set(userId, gameState, cacheEntryOptions);
-            _logger.LogDebug("Sent MatchResponse to singleplayer user {userId}.", userId);
+            _memoryCache.Set(user.UserId, gameState, cacheEntryOptions);
+            _logger.LogDebug("Sent MatchResponse to singleplayer user {userId}.", user.UserId);
 
             return Ok();
         }

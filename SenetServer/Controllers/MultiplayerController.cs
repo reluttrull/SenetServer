@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Caching.Memory;
+using SenetServer.Contracts.Requests;
 using SenetServer.Mapping;
 using SenetServer.Matchmaking;
 using SenetServer.Model;
@@ -30,32 +31,30 @@ namespace SenetServer.Controllers
             _memoryCache = memoryCache;
         }
 
-        [HttpGet]
+        [HttpPost]
         [Route("games")]
-        public async Task<IActionResult> RequestJoinGame()
+        public async Task<IActionResult> RequestJoinGame([FromBody] StartGameRequest request)
         {
-            var userId = UserIdentity.GetOrCreateUserId(HttpContext);
-
-            string userName = UsernameGenerator.GetNewUsername() ?? $"Anonymous{new Random().Next(10000)}";
-
-            var request = new MatchRequest
+            User user = request.MapToUser();
+            if (user.UserId == string.Empty || user.UserName == string.Empty) // todo: add proper validation
             {
-                UserId = userId,
-                UserName = userName,
+                user.UserId = UserIdentity.GetOrCreateUserId(HttpContext);
+                user.UserName = UsernameGenerator.GetNewUsername() ?? $"Anonymous{new Random().Next(10000)}";
+            }
+
+            var matchRequest = new MatchRequest
+            {
+                UserId = user.UserId,
+                UserName = user.UserName,
                 TimeAdded = DateTime.UtcNow
             };
 
-            await _matchmakingQueue.EnqueueAsync(request);
-            _logger.LogInformation("Enqueued match request for user {UserId}: {UserName}", userId, userName);
+            await _matchmakingQueue.EnqueueAsync(matchRequest);
+            _logger.LogInformation("Enqueued match request for user {UserId}: {UserName}", user.UserId, user.UserName);
 
-            UserInfo userInfo = new UserInfo()
-            {
-                UserId = userId,
-                UserName = userName
-            };
             // return 202 with userId for SignalR notifications and userName for display
             // meanwhile, background service still has to process matches in queue
-            return Accepted(ContractMapping.MapToResponse(userInfo));
+            return Accepted(ContractMapping.MapToResponse(user));
         }
 
         [HttpPut]

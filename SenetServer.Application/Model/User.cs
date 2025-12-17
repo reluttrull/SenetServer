@@ -2,9 +2,14 @@
 {
     public class User
     {
-        public string UserId { get; set; }
-        public string UserName { get; set; }
+        public string UserId { get; set; } = string.Empty;
+        public string UserName { get; set; } = string.Empty;
         public bool IsComputer => UserName == Constants.ComputerOpponentName;
+
+        public User()
+        {
+
+        }
 
         public User(string userId, string userName)
         {
