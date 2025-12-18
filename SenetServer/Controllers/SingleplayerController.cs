@@ -52,7 +52,7 @@ namespace SenetServer.Controllers
                 TimeMatched = DateTime.UtcNow
             };
             await _hubContext.Clients.User(user.UserId)
-                .SendAsync("MatchFound", matchResponse);
+                .SendAsync("ComputerMatchFound", matchResponse);
             await _hubContext.Clients.User(user.UserId)
                 .SendAsync("BoardUpdated", gameState.BoardState);
 
